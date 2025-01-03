@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>WebRTC webcam</title>
+    <style>
+        button {
+            padding: 8px 16px;
+        }
+
+        video {
+            width: 100%;
+        }
+
+        .option {
+            margin-bottom: 8px;
+        }
+
+        #media {
+            max-width: 1280px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="option">
+    <input id="use-stun" type="checkbox"/>
+    <label for="use-stun">Use STUN server</label>
+</div>
+<button id="start" onclick="start()">Start</button>
+<button id="stop" style="display: none" onclick="stop()">Stop</button>
+<form class="form-inline" id="echo-form">
+    <div class="form-group">
+        <p>input text</p>
+
+        <textarea cols="2" rows="3" style="width:600px;height:50px;" class="form-control" id="message">test</textarea>
+    </div>
+    <button type="submit" class="btn btn-default">Send</button>
+</form>
+
+<div id="media">
+    <h2>Media</h2>
+
+    <audio id="audio" autoplay="true"></audio>
+    <video id="video" style="width:600px;" autoplay="true" playsinline="true"></video>
+</div>
+
+<script src="client.js"></script>
+<script type="text/javascript" src="http://cdn.sockjs.org/sockjs-0.3.4.js"></script>
+<script type="text/javascript" src="https://code.jquery.com/jquery-2.1.1.min.js"></script>
+</body>
+
+</html>
+
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+
+<script>
+    // 监听表单的 submit 事件
+    $('#echo-form').on('submit', function (e) {
+        e.preventDefault(); // 阻止表单默认的提交行为
+
+        // 获取 textarea 中的文本内容
+        var message = $('#message').val();
+
+        // 使用 jQuery 的 AJAX 发送 GET 请求
+        $.ajax({
+            url: '/human',  // 这里是后端接口的 URL
+            type: 'GET',    // 使用 GET 请求
+            data: {text: message},  // 将用户输入的内容作为查询参数传递
+            success: function (response) {
+                // 成功时的处理
+                console.log('成功:', response);
+                // 可以在这里做一些后续处理
+            },
+            error: function (xhr, status, error) {
+                // 失败时的处理
+                console.error('错误:', error);
+            }
+        });
+    });
+</script>
