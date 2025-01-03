@@ -16,7 +16,7 @@ Lets see the demo.⬇️⬇️⬇️
 
 先来看个demo⬇️⬇️⬇️
 
-![DigitalHuman](https://github.com/user-attachments/assets/9d0b37ee-2076-4b4f-93ba-eb939a9fb427)
+![DigitalHuman]([https://github.com/user-attachments/assets/9d0b37ee-2076-4b4f-93ba-eb939a9fb427](https://github.com/lin-jj-engine/real-Ultralight-Digital-Human/blob/main/%E6%BC%94%E7%A4%BA.mp4))
 
 实时流
 
