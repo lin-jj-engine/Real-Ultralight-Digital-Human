@@ -9,4 +9,4 @@ syncnet_checkpoint
 *.jpg
 data_utils/encoder.onnx
 __MACOSX
-.*
+.idea
