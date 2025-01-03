@@ -6,7 +6,7 @@ __pycache__
 *.mp4
 #checkpoint
 #syncnet_checkpoint
-*.jpg
+#*.jpg
 data_utils/encoder.onnx
 __MACOSX
 .idea
