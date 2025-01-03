@@ -18,6 +18,11 @@ Lets see the demo.⬇️⬇️⬇️
 
 [点击观看演示视频](演示.mp4)
 
+<video width="640" height="480" controls>
+    <source src="演示.mp4" type="video/mp4">
+    您的浏览器不支持视频播放。
+</video>
+
 实时流
 
 ## Train
