@@ -22,6 +22,8 @@ It's so easy to train your own digital human.I will show you step by step.
 
 训练一个你自己的数字人非常简单，我将一步步向你展示。
 
+## 演示
+https://github.com/lin-jj-engine/Real-Ultralight-Digital-Human/blob/main/%E6%BC%94%E7%A4%BA.mp4
 ### install pytorch and other libs
 
 ``` bash
