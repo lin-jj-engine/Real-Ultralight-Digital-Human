@@ -1,3 +1,4 @@
+import asyncio
 import time
 from io import BytesIO
 from typing import Iterator
@@ -82,7 +83,7 @@ class VoitsTTS():
         return streams
 
     def put_audio(self, streams):
-        time.sleep(3)  # 显卡不行，模型跑得快的可以删掉
+        #time.sleep(4)  # 显卡不行，模型跑得快的可以删掉
         for stream in streams:
             streamlen = stream.shape[0]
             idx = 0
@@ -96,6 +97,10 @@ class VoitsTTS():
         for stream in streams:
             streamlen = stream.shape[0]
             if streamlen > 640:
+                start = time.time()
                 hubert_hidden = get_hubert_from_16k_speech(hubert_model, wav2vec2_processor, stream)
                 hubert_hidden = make_even_first_dim(hubert_hidden).reshape(-1, 2, 1024)
-                infer(hubert_hidden.detach().numpy(), queue=video_queue)
+                print('--------')
+                infer(hubert_hidden.detach().numpy(), video_queue)
+                end = time.time()
+                print(end - start)

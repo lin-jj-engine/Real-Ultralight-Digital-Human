@@ -1,4 +1,4 @@
-# Ultralight Digital Human
+#  Real Ultralight Digital Human
 
 <p align="center">
     <a href="./LICENSE"><img src="https://img.shields.io/badge/license-Apache%202-dfd.svg"></a>
@@ -8,23 +8,14 @@
     <br>
 </p>
 
-A Ultralight Digital Human model can run on mobile devices in real time!!!
 
-一个能在移动设备上实时运行的数字人模型,据我所知，这应该是第一个开源的如此轻量级的数字人模型。
 
-Lets see the demo.⬇️⬇️⬇️
 
-先来看个demo⬇️⬇️⬇️
+实时流Ultralight Digital Human项目，本项目基于Ultralight Digital Human接入实时流，实现轻量级数字人实时允许在普通设备上，低至2G以上独显低配显存电脑，GTX900以上可运行
 
-[点击观看演示视频](演示.mp4)
-
-<video width="640" height="480" controls>
-    <source src="演示.mp4" type="video/mp4">
-    您的浏览器不支持视频播放。
-</video>
-
-实时流
-
+## Credits 
+Special thanks to the following projects and contributors:
+[Ultralight-Digital-Human](https://github.com/anliyuan/Ultralight-Digital-Human)
 ## Train
 
 It's so easy to train your own digital human.I will show you step by step.
@@ -140,9 +131,13 @@ ffmpeg -i xxx.mp4 -i your_audio.wav -c:v libx264 -c:a aac result_test.mp4
 
 ## Enjoy🎉🎉🎉
 
-这个模型是支持流式推理的，但是代码还没有完善，之后我会提上来。
+这个模型是支持流式推理的，启动流式推理服务，可以在低显存的普通电脑上允许
 
-关于在移动端上运行也是没问题的，只需要把现在这个模型通道数改小一点，音频特征用wenet就没问题了。相关代码我也会在之后放上来。
+
+```bash
+cd server
+python server.py
+```
 
 if you have some advice, open an issue or PR.
 
@@ -151,8 +146,7 @@ if you have some advice, open an issue or PR.
 If you think this repo is useful to you, please give me a star.
 
 如果你觉的这个repo对你有用的话，记得给我点个star
-通过网盘分享的文件：video.zip
-链接: https://pan.baidu.com/s/1b4r-tgEV7P2IxQGt-5sdRg 提取码: ywpt
+
 BUY ME A CUP OF COFFE⬇️⬇️⬇️
 <table>
   <tr>

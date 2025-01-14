@@ -1,25 +1,26 @@
 import json
 import logging
-import multiprocessing
 import os
 import threading
 import time
 import uuid
-from typing import Tuple
+from typing import Tuple, Union
 
 import cv2
 import numpy as np
-from aiortc import VideoStreamTrack
+from aiortc import MediaStreamTrack
 from aiortc.contrib.media import MediaRelay
-from av import VideoFrame
-from aiortc import RTCPeerConnection, RTCSessionDescription, AudioStreamTrack
+from av import VideoFrame, AudioFrame
+from aiortc import RTCPeerConnection, RTCSessionDescription
 from aiohttp import web
 import asyncio
 
-from av import AudioFrame
 import fractions
 
-from base import VoitsTTS, audio_queue, video_queue
+from av.frame import Frame
+from av.packet import Packet
+
+from base import VoitsTTS, video_queue, audio_queue
 
 ROOT = os.path.dirname(__file__)
 
@@ -27,101 +28,90 @@ logger = logging.getLogger("pc")
 pcs = set()
 relay = MediaRelay()
 sovits = VoitsTTS()
+AUDIO_PTIME = 0.020
 VIDEO_CLOCK_RATE = 90000
-VIDEO_PTIME = 1 / 21  # fps
+VIDEO_PTIME = 1 / 25  # 30fps
 VIDEO_TIME_BASE = fractions.Fraction(1, VIDEO_CLOCK_RATE)
+SAMPLE_RATE = 16000
+AUDIO_TIME_BASE = fractions.Fraction(1, SAMPLE_RATE)
 
 
-class FrameStreamTrack(VideoStreamTrack):
-    kind = 'video'  # 确保轨道类型是视频
+class PlayerStreamTrack(MediaStreamTrack):
+    """
+    A video track that returns an animated flag.
+    """
 
-    def __init__(self):
+    def __init__(self, kind):
         super().__init__()
-        self.index = 0
-        self.start_frames = 30
-        self.step_stride = 0
-        self.max_frame = 48
+        self.kind = kind
+        self._queue = asyncio.Queue()
+        self.timelist = []  # 记录最近包的时间戳
+        if self.kind == 'video':
+            self.framecount = 0
+            self.lasttime = time.perf_counter()
+            self.totaltime = 0
+
+    _start: float
+    _timestamp: int
 
     async def next_timestamp(self) -> Tuple[int, fractions.Fraction]:
+        if self.readyState != "live":
+            raise Exception
 
-        if hasattr(self, "_timestamp"):
-            self._timestamp += int(VIDEO_PTIME * VIDEO_CLOCK_RATE)
-            wait = self._start + (self._timestamp / VIDEO_CLOCK_RATE) - time.time()
-            await asyncio.sleep(wait)
-        else:
-            self._start = time.time()
-            self._timestamp = 0
-        return self._timestamp, VIDEO_TIME_BASE
+        if self.kind == 'video':
+            if hasattr(self, "_timestamp"):
+                # self._timestamp = (time.time()-self._start) * VIDEO_CLOCK_RATE
+                self._timestamp += int(VIDEO_PTIME * VIDEO_CLOCK_RATE)
+                wait = self._start + (self._timestamp / VIDEO_CLOCK_RATE) - time.time()
+                if wait > 0:
+                    await asyncio.sleep(wait)
+            else:
+                self._start = time.time()
+                self._timestamp = 0
+                self.timelist.append(self._start)
+                print('video start:', self._start)
+            return self._timestamp, VIDEO_TIME_BASE
+        else:  # audio
+            if hasattr(self, "_timestamp"):
+                # self._timestamp = (time.time()-self._start) * SAMPLE_RATE
+                self._timestamp += int(AUDIO_PTIME * SAMPLE_RATE)
+                wait = self._start + (self._timestamp / SAMPLE_RATE) - time.time()
+                if wait > 0:
+                    # print(wait)
+                    await asyncio.sleep(wait)
+            else:
+                self._start = time.time()
+                self._timestamp = 0
+                self.timelist.append(self._start)
+                print('audio start:', self._start)
+            return self._timestamp, AUDIO_TIME_BASE
 
-    async def recv(self):
-        print("1")
-        try:
-            print(video_queue.qsize())
-            if audio_queue.qsize() < 1 or video_queue.qsize() < self.start_frames:
-                raise ZeroDivisionError
-            if video_queue.qsize() >= self.start_frames:
-                self.start_frames = 0
-            if video_queue.qsize() == 0:
-                self.start_frames = 30
-            frame = video_queue.get(block=False, timeout=0.01)
-        except Exception:
-            frame_directory = 'frames'
-            # 加载当前帧
-            frame_files = sorted(os.listdir(frame_directory))  # 获取所有图片文件，按名称排序
-            fsize = len(frame_files)
-            frame_path = os.path.join(frame_directory, frame_files[self.index])
-            frame = cv2.imread(frame_path)
-            if self.index >= fsize - 1:
-                self.step_stride = -1
-            if self.index < 1:
-                self.step_stride = 1
-            self.index += self.step_stride
-            if self.index > fsize - 1:
-                self.index = fsize - 1
-
-        print(frame.shape)
-        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)  # 转为RGB格式
-        frame = np.array(frame)
-        frame = VideoFrame.from_ndarray(frame, format="rgb24")
+    async def recv(self) -> Union[Frame, Packet]:
+        # print(self.kind)
+        frame = await self._queue.get()
+        if frame is None:
+            self.stop()
+            raise Exception
         pts, time_base = await self.next_timestamp()
         frame.pts = pts
         frame.time_base = time_base
-        print(frame.pts, frame.time_base)
+        if self.kind == 'video':
+            self.totaltime += (time.perf_counter() - self.lasttime)
+            self.framecount += 1
+            self.lasttime = time.perf_counter()
+            if self.framecount == 100:
+                print(f"------actual avg final fps:{self.framecount / self.totaltime:.4f}")
+                self.framecount = 0
+                self.totaltime = 0
         return frame
 
+    def stop(self):
+        super().stop()
 
-class AudioFileTrack(AudioStreamTrack):
-    """
-    从 WAV 文件中读取音频数据的自定义音频轨道。
-    """
-    kind = "audio"
 
-    def __init__(self):
-        super().__init__()
-        self.sovits = VoitsTTS()
-        self.sample_rate = 16000
-        self._timestamp = 0  # 初始化时间戳
-
-    async def recv(self):
-        """
-        从 WAV 文件读取音频帧，并返回音频帧。
-        """
-
-        try:
-            frame = audio_queue.get(block=False, timeout=0.01)
-        except Exception:
-            frame = np.zeros(320, dtype=np.float32)
-        frame = (frame * 32767).astype(np.int16)
-        new_frame = AudioFrame(format='s16', layout='mono', samples=frame.shape[0])
-        new_frame.planes[0].update(frame.tobytes())
-        new_frame.sample_rate = 16000
-        frame = new_frame
-        frame.pts = self._timestamp
-        frame.time_base = fractions.Fraction(1, self.sample_rate)
-        # print(frame.pts / self.sample_rate)
-        self._timestamp += 320  # 增加时间戳
-        time.sleep(0.01)
-        return frame
+class HumanPlayer:
+    audio = PlayerStreamTrack(kind="audio")
+    video = PlayerStreamTrack(kind="video")
 
 
 async def index(request):
@@ -146,10 +136,12 @@ async def offer(request):
         logger.info(pc_id + " " + msg, *args)
 
     log_info("Created for %s", request.remote)
+    daemon_thread = threading.Thread(target=run_coroutine_in_thread)
+    daemon_thread.daemon = True  # 设置为守护线程，主线程退出时，守护线程也会退出
+    daemon_thread.start()
+    pc.addTrack(HumanPlayer.audio)
+    pc.addTrack(HumanPlayer.video)
 
-    audio_track = AudioFileTrack()  # 设置视频路径
-    pc.addTrack(audio_track)
-    pc.addTrack(FrameStreamTrack())
     await pc.setRemoteDescription(offer)
 
     # send answer
@@ -174,7 +166,6 @@ async def on_shutdown(app):
 async def human(request):
     text = request.query.get('text', '')  # 如果没有提供 'text' 参数，默认值为空字符串
     await interface(text)
-
     return web.Response(content_type="application/json", text=json.dumps({"status": "success", "text": text}))
 
 
@@ -184,10 +175,67 @@ async def interface(text):
         'xiaofu.mp3', '你好，我是小福，我是一个人工助手', 'zh',
         'http://192.168.1.13:9881')
     ad_stream = sovits.stream_tts(result_generator)
-    thread1 = threading.Thread(target=sovits.put_video, args=(ad_stream,))
-    thread1.start()  # 启动线程
-    thread1 = threading.Thread(target=sovits.put_audio, args=(ad_stream,))
-    thread1.start()  # 启动线程
+    thread = threading.Thread(target=sovits.put_video, args=(ad_stream,))
+    thread.start()  # 启动线程
+
+    thread2 = threading.Thread(target=sovits.put_audio, args=(ad_stream,))
+    thread2.start()  # 启动线程
+
+
+async def listen_queue():
+    img_index = 0
+    step_stride = 0
+    frame_directory = 'frames'
+    while True:
+        if video_queue.qsize() > 0 and audio_queue.qsize() > 1:
+            # print(video_queue.qsize())
+            await asyncio.sleep(0.01)
+            frame = video_queue.get(block=False, timeout=0.01)
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)  # 转为RGB格式
+            frame = np.array(frame)
+            frame = VideoFrame.from_ndarray(frame, format="rgb24")
+            await HumanPlayer.video._queue.put(frame)
+            for di in range(2):
+                audio_frame = audio_queue.get(block=False, timeout=0.01)
+                audio_frame = (audio_frame * 32767).astype(np.int16)
+                new_frame = AudioFrame(format='s16', layout='mono', samples=audio_frame.shape[0])
+                new_frame.planes[0].update(audio_frame.tobytes())
+                new_frame.sample_rate = 16000
+                audio_frame = new_frame
+                await HumanPlayer.audio._queue.put(audio_frame)
+        else:
+            # 加载当前帧
+            await asyncio.sleep(0.01)
+            vsize = HumanPlayer.video._queue.qsize()
+            if vsize > 10:
+                time.sleep(0.01)
+                continue
+            frame_files = sorted(os.listdir(frame_directory))  # 获取所有图片文件，按名称排序
+            fsize = len(frame_files)
+            frame_path = os.path.join(frame_directory, frame_files[img_index])
+            frame = cv2.imread(frame_path)
+            if img_index >= fsize - 1:
+                step_stride = -1
+            if img_index < 1:
+                step_stride = 1
+            img_index += step_stride
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)  # 转为RGB格式
+            frame = np.array(frame)
+            frame = VideoFrame.from_ndarray(frame, format="rgb24")
+            await HumanPlayer.video._queue.put(frame)
+            # 塞入静音音频
+            for i in range(2):
+                audio_frame = np.zeros(320, dtype=np.float32)
+                audio_frame = audio_frame.astype(np.int16)
+                new_frame = AudioFrame(format='s16', layout='mono', samples=audio_frame.shape[0])
+                new_frame.planes[0].update(audio_frame.tobytes())
+                new_frame.sample_rate = 16000
+                audio_frame = new_frame
+                await HumanPlayer.audio._queue.put(audio_frame)
+
+
+def run_coroutine_in_thread():
+    asyncio.run(listen_queue())
 
 
 if __name__ == "__main__":
